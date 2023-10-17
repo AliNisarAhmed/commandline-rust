@@ -11,6 +11,7 @@ const EMPTY: &str = "tests/inputs/empty.txt";
 const FOX: &str = "tests/inputs/fox.txt";
 const SPIDERS: &str = "tests/inputs/spiders.txt";
 const BUSTLE: &str = "tests/inputs/the-bustle.txt";
+const EXTRA_LINES: &str = "tests/inputs/extra-lines.txt";
 
 // --------------------------------------------------
 #[test]
@@ -147,7 +148,10 @@ fn spiders() -> TestResult {
 // --------------------------------------------------
 #[test]
 fn spiders_n() -> TestResult {
-    run(&["--number-lines", SPIDERS], "tests/expected/spiders.txt.n.out")
+    run(
+        &["--number-lines", SPIDERS],
+        "tests/expected/spiders.txt.n.out",
+    )
 }
 
 // --------------------------------------------------
@@ -193,4 +197,29 @@ fn all_n() -> TestResult {
 #[test]
 fn all_b() -> TestResult {
     run(&[FOX, SPIDERS, BUSTLE, "-b"], "tests/expected/all.b.out")
+}
+
+#[test]
+fn extra_lines_n() -> TestResult {
+    run(&["-n", EXTRA_LINES], "tests/expected/extra-lines.txt.n.out")
+}
+
+#[test]
+fn extra_lines_b() -> TestResult {
+    run(&["-b", EXTRA_LINES], "tests/expected/extra-lines.txt.b.out")
+}
+
+#[test]
+fn extra_lines_s() -> TestResult {
+    run(&["-s", EXTRA_LINES], "tests/expected/extra-lines.txt.s.out")
+}
+
+#[test]
+fn extra_lines_s_b() -> TestResult {
+    run(&["-sb", EXTRA_LINES], "tests/expected/extra-lines.txt.b.s.out")
+}
+
+#[test]
+fn extra_lines_s_n() -> TestResult {
+    run(&["-sn", EXTRA_LINES], "tests/expected/extra-lines.txt.b.n.out")
 }
