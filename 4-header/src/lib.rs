@@ -7,7 +7,10 @@ use std::io::{self, BufRead, BufReader, Read};
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(name = "headr")]
+#[command(author = "Ali Ahmed")]
+#[command(version = "1.0")]
+#[command(about = "Rust cat", long_about = None)]
 #[command(group(
         ArgGroup::new("flags")
             .required(false)
