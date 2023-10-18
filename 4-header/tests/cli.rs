@@ -351,6 +351,16 @@ fn ten_n4() -> TestResult {
 }
 
 #[test]
+fn ten_n_neg_1() -> TestResult {
+    run(&[TEN, "-n", "-1"], "tests/expected/ten.txt.n_neg_1.out")
+}
+
+#[test]
+fn ten_n_neg_11() -> TestResult {
+    run(&[TEN, "-n", "-11"], "tests/expected/ten.txt.n_neg_11.out")
+}
+
+#[test]
 fn ten_c2() -> TestResult {
     run(&[TEN, "-c", "2"], "tests/expected/ten.txt.c2.out")
 }

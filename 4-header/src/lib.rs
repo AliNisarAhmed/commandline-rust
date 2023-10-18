@@ -1,4 +1,5 @@
 use clap::{ArgGroup, Parser};
+use std::cmp::max;
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
@@ -17,8 +18,13 @@ pub struct Config {
     #[arg(help = "Input file(s)", required = false, default_value = "-")]
     files: Vec<String>,
 
-    #[arg(help = "Number of lines to print", short = 'n', default_value_t = 10, value_parser = parse_positive_int)]
-    lines: usize,
+    #[arg(
+        help = "Number of lines to print",
+        short = 'n',
+        default_value_t = 10,
+        allow_hyphen_values = true
+    )]
+    lines: isize,
 
     #[arg(help = "Number of bytes to print", short = 'c', value_parser = parse_positive_int)]
     bytes: Option<usize>,
@@ -72,17 +78,33 @@ fn print_single_file(filename: &String, config: &Config) -> String {
             } else {
                 let mut result = String::new();
                 let mut line = String::new();
+                let mut lines_to_read = config.lines;
 
-                for _ in 0..config.lines {
+                loop {
                     let bytes = file.read_line(&mut line).unwrap();
                     // when read_line reaches EOF it returns 0 bytes
-                    if bytes == 0 {
+                    if bytes == 0 || (config.lines > 0 && lines_to_read <= 0) {
                         break;
                     }
                     result.push_str(&line);
                     line.clear();
+                    lines_to_read -= 1;
                 }
 
+                if config.lines > 0 {
+                    return result;
+                }
+
+                let num_lines: isize = result.clone().lines().count() as isize;
+                let lines_to_take = max(0, num_lines.wrapping_add(config.lines as isize)) as usize;
+                let mut result = result
+                    .lines()
+                    .take(lines_to_take)
+                    .collect::<Vec<&str>>()
+                    .join("\n");
+                if lines_to_take > 0 {
+                    result.push_str("\n");
+                }
                 result
             }
         }
