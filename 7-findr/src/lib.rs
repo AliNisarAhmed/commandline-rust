@@ -1,7 +1,7 @@
 use crate::EntryType::*;
 use clap::{ArgAction, Parser, ValueEnum};
 use regex::Regex;
-use std::error::Error;
+use std::{cmp::Ordering, error::Error};
 use walkdir::{DirEntry, WalkDir};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
@@ -11,6 +11,36 @@ pub enum EntryType {
     Dir,
     File,
     Link,
+}
+
+#[derive(Clone, Debug)]
+struct SizeFilter {
+    ordering: Ordering,
+    size: usize,
+    unit: SizeUnit,
+}
+
+impl SizeFilter {
+    fn get_size_in_bytes(&self) -> usize {
+        match self.unit {
+            SizeUnit::Bytes => self.size,
+            SizeUnit::Kilobytes => self.size * 1024,
+            SizeUnit::Megabytes => self.size * 1024 * 1024,
+            SizeUnit::Gigabytes => self.size * 1024 * 1024 * 1024,
+            SizeUnit::Terabytes => self.size * 1024 * 1024 * 1024 * 1024,
+            SizeUnit::Petabytes => self.size * 1024 * 1024 * 1024 * 1024 * 1024,
+        }
+    }
+}
+
+#[derive(Debug, ValueEnum, Clone)]
+enum SizeUnit {
+    Bytes,
+    Kilobytes,
+    Megabytes,
+    Gigabytes,
+    Terabytes,
+    Petabytes,
 }
 
 #[derive(Parser, Debug)]
@@ -32,6 +62,45 @@ pub struct Config {
         long = "min-depth"
     )]
     min_depth: Option<usize>,
+
+    #[arg(help = "filter on size", long, value_parser = parse_size)]
+    size: Option<SizeFilter>,
+}
+
+fn parse_size(input: &str) -> Result<SizeFilter, String> {
+    let re = Regex::new(r"([+-]?)(\d+)([ckMGTP]?)").unwrap();
+    let caps = re.captures(input).unwrap();
+
+    Ok(SizeFilter {
+        ordering: parse_ordering(&caps[1]).unwrap(),
+        size: parse_size_value(&caps[2]).unwrap(),
+        unit: parse_unit(&caps[3]).unwrap(),
+    })
+}
+
+fn parse_ordering(input: &str) -> Result<Ordering, String> {
+    match input {
+        "+" => Ok(Ordering::Greater),
+        "-" => Ok(Ordering::Less),
+        "" => Ok(Ordering::Equal),
+        _ => Err(format!("illegal ordering option")),
+    }
+}
+
+fn parse_unit(input: &str) -> Result<SizeUnit, String> {
+    match input {
+        "c" => Ok(SizeUnit::Bytes),
+        "" => Ok(SizeUnit::Bytes),
+        "k" => Ok(SizeUnit::Kilobytes),
+        "M" => Ok(SizeUnit::Megabytes),
+        "G" => Ok(SizeUnit::Gigabytes),
+        "P" => Ok(SizeUnit::Petabytes),
+        _ => Err(format!("illegal unit")),
+    }
+}
+
+fn parse_size_value(input: &str) -> Result<usize, String> {
+    input.parse().map_err(|_e| format!("illegal size value"))
 }
 
 fn parse_name(name: &str) -> Result<Regex, String> {
@@ -72,6 +141,20 @@ pub fn run(config: Config) -> MyResult<()> {
                 .any(|re| re.is_match(&entry.file_name().to_string_lossy()))
     };
 
+    let size_filter = |entry: &DirEntry| {
+        if let Some(size_config) = &config.size {
+            let file_size = entry.metadata().unwrap().len() as usize;
+            let size_in_filter = size_config.get_size_in_bytes();
+            match size_config.ordering {
+                Ordering::Equal => file_size == size_in_filter,
+                Ordering::Less => file_size < size_in_filter,
+                Ordering::Greater => file_size > size_in_filter,
+            }
+        } else {
+            true
+        }
+    };
+
     for path in &config.paths {
         let mut walkdir = WalkDir::new(path);
 
@@ -100,6 +183,7 @@ pub fn run(config: Config) -> MyResult<()> {
             })
             .filter(type_filter)
             .filter(name_filter)
+            .filter(size_filter)
             .map(|entry| entry.path().display().to_string())
             .collect::<Vec<_>>();
 
