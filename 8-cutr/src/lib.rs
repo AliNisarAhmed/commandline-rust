@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs::File,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, Write},
     num::NonZeroUsize,
     ops::Range,
 };
@@ -35,7 +35,7 @@ pub struct Args {
     #[arg(help = "Input File(s) [default: -]", default_value = "-")]
     files: Vec<String>,
 
-    #[arg(help = "Field delimiter [default:  ]", 
+    #[arg(help = "Input field delimiter [default:  ]", 
           short = 'd',
           long,
           default_value = "\t", 
@@ -51,12 +51,19 @@ pub struct Args {
     #[arg(help = "Selected fields", short = 'f', value_parser = parse_fields, required = false)]
     fields: Option<Extract>,
 
+    #[arg(help = "Output field delimiter (defaults to input delimiter)", long, value_parser = parse_delimiter)]
+    output_delimiter: Option<u8>,
+
+    #[arg(help = "Output file (defaults to STDOUT)", short = 'o', long)]
+    output_file: Option<String>,
 }
 #[derive(Debug)]
 pub struct Config {
     files: Vec<String>,
     delimiter: u8,
     extract: Extract,
+    output_delimiter: u8,
+    output_file: Option<String>,
 }
 
 fn parse_delimiter(input: &str) -> Result<u8, String> {
@@ -92,8 +99,9 @@ fn parse_fields(input: &str) -> Result<Extract, String> {
 fn parse_index(input: &str) -> Result<usize, String> {
     let value_error = || format!("illegal list value: {}", input);
 
-    input
-        .starts_with("+")
+    let re = Regex::new(r"^\d*$").unwrap();
+
+    (!re.is_match(input))
         .then(|| Err(value_error()))
         .unwrap_or_else(|| {
             input
@@ -138,22 +146,29 @@ pub fn get_args() -> MyResult<Config> {
         files: args.files,
         delimiter: args.delimiter,
         extract: args.bytes.or(args.chars).or(args.fields).unwrap(),
+        output_delimiter: args.output_delimiter.unwrap_or(args.delimiter),
+        output_file: args.output_file,
     })
 }
 
 pub fn run(config: Config) -> MyResult<()> {
+    let mut out_file: Box<dyn Write> = match config.output_file {
+        Some(output_file_name) => Box::new(File::create(output_file_name)?),
+        _ => Box::new(io::stdout()),
+    };
+
     for filename in &config.files {
         match open(filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
             Ok(file) => match &config.extract {
                 Extract::Bytes(bytes_pos) => {
                     for line in file.lines() {
-                        println!("{}", extract_bytes(&line?, bytes_pos))
+                        writeln!(&mut out_file, "{}", extract_bytes(&line?, bytes_pos))?
                     }
                 }
                 Extract::Chars(char_pos) => {
                     for line in file.lines() {
-                        println!("{}", extract_chars(&line?, char_pos))
+                        writeln!(&mut out_file, "{}", extract_chars(&line?, char_pos))?
                     }
                 }
                 Extract::Fields(field_pos) => {
@@ -163,8 +178,8 @@ pub fn run(config: Config) -> MyResult<()> {
                         .from_reader(file);
 
                     let mut writer = WriterBuilder::new()
-                        .delimiter(config.delimiter)
-                        .from_writer(io::stdout());
+                        .delimiter(config.output_delimiter)
+                        .from_writer(&mut out_file);
 
                     for record in reader.records() {
                         let record = record?;
