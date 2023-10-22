@@ -7,6 +7,7 @@ use std::{
 };
 
 use clap::{arg, ArgGroup, Parser};
+use csv::{ReaderBuilder, StringRecord, WriterBuilder};
 use regex::Regex;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
@@ -49,6 +50,7 @@ pub struct Args {
 
     #[arg(help = "Selected fields", short = 'f', value_parser = parse_fields, required = false)]
     fields: Option<Extract>,
+
 }
 #[derive(Debug)]
 pub struct Config {
@@ -82,6 +84,11 @@ fn parse_fields(input: &str) -> Result<Extract, String> {
     Ok(Extract::Fields(parse_pos(input).unwrap()))
 }
 
+// Parse an index from a string representation of an integer.
+// Ensures the number is non-zero.
+// Ensures the number does not start with '+'.
+// Returns an index, which is a non-negative integer that is
+// one less than the number represented by the original input.
 fn parse_index(input: &str) -> Result<usize, String> {
     let value_error = || format!("illegal list value: {}", input);
 
@@ -149,7 +156,21 @@ pub fn run(config: Config) -> MyResult<()> {
                         println!("{}", extract_chars(&line?, char_pos))
                     }
                 }
-                Extract::Fields(field_pos) => {}
+                Extract::Fields(field_pos) => {
+                    let mut reader = ReaderBuilder::new()
+                        .delimiter(config.delimiter)
+                        .has_headers(false)
+                        .from_reader(file);
+
+                    let mut writer = WriterBuilder::new()
+                        .delimiter(config.delimiter)
+                        .from_writer(io::stdout());
+
+                    for record in reader.records() {
+                        let record = record?;
+                        writer.write_record(extract_fields(&record, field_pos))?;
+                    }
+                }
             },
         }
     }
@@ -178,6 +199,14 @@ pub fn extract_bytes(line: &str, byte_pos: &[Range<usize>]) -> String {
         .collect();
 
     String::from_utf8_lossy(&selected).into_owned()
+}
+
+pub fn extract_fields<'a>(record: &'a StringRecord, field_pos: &[Range<usize>]) -> Vec<&'a str> {
+    field_pos
+        .iter()
+        .cloned()
+        .flat_map(|range| range.filter_map(|i| record.get(i)))
+        .collect()
 }
 
 fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {

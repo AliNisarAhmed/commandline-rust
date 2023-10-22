@@ -1,5 +1,6 @@
 use assert_cmd::Command;
-use cutr::{extract_chars, extract_bytes};
+use csv::StringRecord;
+use cutr::{extract_bytes, extract_chars, extract_fields};
 use predicates::prelude::*;
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
@@ -348,4 +349,14 @@ fn test_extract_bytes() {
     assert_eq!(extract_bytes("ábc", &[0..4]), "ábc".to_string());
     assert_eq!(extract_bytes("ábc", &[3..4, 2..3]), "cb".to_string());
     assert_eq!(extract_bytes("ábc", &[0..2, 5..6]), "á".to_string());
+}
+
+#[test]
+fn test_extract_fields() {
+    let rec = StringRecord::from(vec!["Captain", "Sham", "12345"]);
+    assert_eq!(extract_fields(&rec, &[0..1]), &["Captain"]);
+    assert_eq!(extract_fields(&rec, &[1..2]), &["Sham"]);
+    assert_eq!(extract_fields(&rec, &[0..1, 2..3]), &["Captain", "12345"]);
+    assert_eq!(extract_fields(&rec, &[0..1, 3..4]), &["Captain"]);
+    assert_eq!(extract_fields(&rec, &[1..2, 0..1]), &["Sham", "Captain"]);
 }
