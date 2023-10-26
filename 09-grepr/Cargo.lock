@@ -196,6 +196,7 @@ version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "clap",
+ "owo-colors",
  "predicates",
  "rand",
  "regex",
@@ -244,6 +245,12 @@ checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "owo-colors"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 
 [[package]]
 name = "ppv-lite86"
