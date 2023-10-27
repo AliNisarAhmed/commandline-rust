@@ -88,7 +88,6 @@ pub fn run(config: Config) -> MyResult<()> {
             }
             (None, Some(line2)) => {
                 println!("{}{}", &config.delimiter, line2);
-                print_output_line("", &line2, "");
                 file2_line = file2_iter.next();
             }
             (None, None) => break,
