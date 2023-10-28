@@ -22,13 +22,13 @@ pub struct Config {
     file2: String,
 
     #[arg(help = "Suppress printing of column 1", short = '1', long)]
-    show_col1: bool,
+    suppress_col1: bool,
 
     #[arg(help = "Suppress printing of column 2", short = '2', long)]
-    show_col2: bool,
+    suppress_col2: bool,
 
     #[arg(help = "Suppress printing of column 3", short = '3', long)]
-    show_col3: bool,
+    suppress_col3: bool,
 
     #[arg(help = "Case-insensitive comparison of lines", short = 'i', long)]
     insensitive: bool,
@@ -49,13 +49,6 @@ pub fn run(config: Config) -> MyResult<()> {
         return Err(From::from("Both input files cannot be STDIN (\"-\")"));
     }
 
-    let print_output_line = |line1: &str, line2: &str, common: &str| {
-        println!(
-            "{}{}{}{}{}",
-            line1, config.delimiter, line2, config.delimiter, common
-        )
-    };
-
     let _file1 = open(file1)?;
     let _file2 = open(file2)?;
 
@@ -67,27 +60,27 @@ pub fn run(config: Config) -> MyResult<()> {
 
     loop {
         match (&file1_line, &file2_line) {
-            (Some(line1), Some(line2)) => match line1.cmp(&line2) {
+            (Some(line1), Some(line2)) => match compare_lines(line1, line2, config.insensitive) {
                 Ordering::Less => {
-                    println!("{}", line1);
+                    print_line_1(line1, &config);
                     file1_line = file1_iter.next();
                 }
                 Ordering::Greater => {
-                    println!("{}{}", &config.delimiter, line2);
+                    print_line_2(line2, &config);
                     file2_line = file2_iter.next();
                 }
                 Ordering::Equal => {
-                    println!("{}{}{}", &config.delimiter, &config.delimiter, line1);
+                    print_line_3(line1, &config);
                     file1_line = file1_iter.next();
                     file2_line = file2_iter.next();
                 }
             },
             (Some(line1), None) => {
-                println!("{}", line1);
+                print_line_1(line1, &config);
                 file1_line = file1_iter.next();
             }
             (None, Some(line2)) => {
-                println!("{}{}", &config.delimiter, line2);
+                print_line_2(line2, &config);
                 file2_line = file2_iter.next();
             }
             (None, None) => break,
@@ -95,6 +88,42 @@ pub fn run(config: Config) -> MyResult<()> {
     }
 
     Ok(())
+}
+
+fn print_line_1(line1: &str, config: &Config) {
+    if !config.suppress_col1 {
+        println!("{}", line1)
+    }
+}
+
+fn print_line_2(line2: &str, config: &Config) {
+    if !config.suppress_col2 {
+        if config.suppress_col1 {
+            println!("{}", line2);
+        } else {
+            println!("{}{}", config.delimiter, line2);
+        }
+    }
+}
+
+fn print_line_3(line3: &str, config: &Config) {
+    if !config.suppress_col3 {
+        if config.suppress_col1 && config.suppress_col2 {
+            println!("{}", line3);
+        } else if config.suppress_col1 || config.suppress_col2 {
+            println!("{}{}", config.delimiter, line3)
+        } else {
+            println!("{}{}{}", config.delimiter, config.delimiter, line3)
+        }
+    }
+}
+
+fn compare_lines(line1: &str, line2: &str, insensitive: bool) -> Ordering {
+    if insensitive {
+        line1.to_lowercase().cmp(&line2.to_lowercase())
+    } else {
+        line1.cmp(&line2)
+    }
 }
 
 fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
