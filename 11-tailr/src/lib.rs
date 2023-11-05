@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs::File,
-    io::{BufRead, BufReader, Read, Seek},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
     str::FromStr,
 };
 
@@ -73,16 +73,30 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    for filename in config.files {
+    let num_files = config.files.len();
+    for (file_num, filename) in config.files.iter().enumerate() {
         match File::open(&filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
             Ok(file) => {
+                if !config.quiet && num_files > 1 {
+                    println!(
+                        "{}==> {} <==",
+                        if file_num > 0 { "\n" } else { "" },
+                        filename
+                    )
+                }
+
                 let (total_lines, total_bytes) = count_lines_bytes(&filename)?;
                 let file = BufReader::new(file);
-                print_lines(file, &config.lines, total_lines)?;
+                if let Some(num_bytes) = &config.bytes {
+                    print_bytes(file, num_bytes, total_bytes)?;
+                } else {
+                    print_lines(file, &config.lines, total_lines)?
+                }
             }
         }
     }
+
     Ok(())
 }
 
@@ -129,17 +143,26 @@ fn print_bytes<T: Read + Seek>(
     num_bytes: &TakeValue,
     total_bytes: i64,
 ) -> MyResult<()> {
-    unimplemented!();
+    if let Some(start) = get_starting_index(&num_bytes, total_bytes) {
+        file.seek(SeekFrom::Start(start))?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        if !buffer.is_empty() {
+            print!("{}", String::from_utf8_lossy(&buffer));
+        }
+    }
+
+    Ok(())
 }
 
-fn get_starting_index(take_val: &TakeValue, total: i64) -> Option<i64> {
+fn get_starting_index(take_val: &TakeValue, total: i64) -> Option<u64> {
     match take_val {
         TakeValue::PlusZero if total == 0 => None,
-        TakeValue::PlusZero => Some(total - 1),
+        TakeValue::PlusZero => Some((total - 1) as u64),
         TakeValue::TakeNum(k) if total == 0 || *k > total => None,
         TakeValue::TakeNum(k) if *k < 0 && k.abs() > total => Some(0),
-        TakeValue::TakeNum(k) if *k < 0 => Some(total + *k),
-        TakeValue::TakeNum(k) => Some(*k - 1),
+        TakeValue::TakeNum(k) if *k < 0 => Some((total + *k) as u64),
+        TakeValue::TakeNum(k) => Some((*k - 1) as u64),
     }
 }
 
