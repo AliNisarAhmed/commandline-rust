@@ -2,11 +2,12 @@ use std::{
     error::Error,
     ffi::OsStr,
     fs::{self, File},
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader},
     path::PathBuf,
 };
 
 use clap::Parser;
+use rand::{seq::SliceRandom, SeedableRng};
 use regex::{Regex, RegexBuilder};
 use walkdir::WalkDir;
 
@@ -19,11 +20,10 @@ pub struct Args {
 
     #[arg(short = 'm', long, name = "PATTERN", help = "Pattern")]
     pattern: Option<String>,
-
     #[arg(short = 'i', long, help = "Case-insensitive pattern matching")]
     insensitive: bool,
 
-    #[arg(short = 's', long, name = "SEED", help = "Random seed")]
+    #[arg(short = 's', long, name = "SEED", help = "Random seed", value_parser = parse_u64)]
     seed: Option<u64>,
 }
 
@@ -66,11 +66,36 @@ pub fn get_args() -> MyResult<Config> {
 pub fn run(config: Config) -> MyResult<()> {
     let files = find_files(&config.sources)?;
     let fortunes = read_fortunes(&files)?;
-    println!("{:#?}", fortunes.last());
+
+    if let Some(pattern) = config.pattern {
+        let mut prev_source = None;
+
+        for fortune in fortunes.iter().filter(|f| pattern.is_match(&f.text)) {
+            if prev_source.as_ref().map_or(true, |s| s != &fortune.source) {
+                eprintln!("({})\n%", fortune.source);
+                prev_source = Some(fortune.source.clone());
+            }
+
+            println!("{}\n%", fortune.text);
+        }
+    } else {
+        println!(
+            "{}",
+            pick_fortune(&fortunes, config.seed)
+                .or_else(|| Some("No fortunes found".to_string()))
+                .unwrap()
+        )
+    }
+
     Ok(())
 }
 
 // -------------------------------------------------------------------------
+
+fn parse_u64(val: &str) -> Result<u64, String> {
+    val.parse()
+        .map_err(|_| format!("\"{}\" not a valid integer", val).into())
+}
 
 fn find_files(paths: &[String]) -> MyResult<Vec<PathBuf>> {
     let dat = OsStr::new("dat");
@@ -125,7 +150,13 @@ fn read_fortunes(paths: &[PathBuf]) -> MyResult<Vec<Fortune>> {
 }
 
 fn pick_fortune(fortunes: &[Fortune], seed: Option<u64>) -> Option<String> {
-    unimplemented!();
+    if let Some(seed_value) = seed {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed_value);
+        fortunes.choose(&mut rng).map(|f| f.text.to_string())
+    } else {
+        let mut rng = rand::thread_rng();
+        fortunes.choose(&mut rng).map(|f| f.text.to_string())
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -134,7 +165,7 @@ fn pick_fortune(fortunes: &[Fortune], seed: Option<u64>) -> Option<String> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{find_files, read_fortunes};
+    use crate::{find_files, pick_fortune, read_fortunes, Fortune};
 
     #[test]
     fn test_find_files() {
@@ -211,5 +242,32 @@ mod tests {
         ]);
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 11);
+    }
+
+    #[test]
+    fn test_pick_fortune() {
+        // Create a slice of fortunes
+        let fortunes = &[
+            Fortune {
+                source: "fortunes".to_string(),
+                text: "You cannot achieve the impossible without \
+                    attempting the absurd."
+                    .to_string(),
+            },
+            Fortune {
+                source: "fortunes".to_string(),
+                text: "Assumption is the mother of all screw-ups".to_string(),
+            },
+            Fortune {
+                source: "fortunes".to_string(),
+                text: "Neckties strangle clear thinking".to_string(),
+            },
+        ];
+
+        // Pick a fortune with a seed
+        assert_eq!(
+            pick_fortune(fortunes, Some(1)).unwrap(),
+            "Neckties strangle clear thinking".to_string()
+        )
     }
 }

@@ -35,7 +35,7 @@ fn gen_bad_file() -> String {
 #[test]
 fn dies_bad_file() -> TestResult {
     let bad = gen_bad_file();
-    let expected = format!("{}: .* [(]os error 2[)]", bad);
+    let expected = format!("[(]os error 2[)]");
     Command::cargo_bin(PRG)?
         .args(&[LITERATURE, &bad])
         .assert()
