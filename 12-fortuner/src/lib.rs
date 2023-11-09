@@ -2,7 +2,7 @@ use std::{
     error::Error,
     ffi::OsStr,
     fs::{self, File},
-    io::{Read, BufReader, BufRead},
+    io::{BufRead, BufReader, Read},
     path::PathBuf,
 };
 
@@ -65,7 +65,8 @@ pub fn get_args() -> MyResult<Config> {
 
 pub fn run(config: Config) -> MyResult<()> {
     let files = find_files(&config.sources)?;
-    println!("{:#?}", files);
+    let fortunes = read_fortunes(&files)?;
+    println!("{:#?}", fortunes.last());
     Ok(())
 }
 
@@ -113,14 +114,18 @@ fn read_fortunes(paths: &[PathBuf]) -> MyResult<Vec<Fortune>> {
                         text: buffer.join("\n"),
                     });
                     buffer.clear();
-                } else {
-                    buffer.push(line.to_string());
                 }
+            } else {
+                buffer.push(line.to_string());
             }
         }
     }
 
     Ok(result)
+}
+
+fn pick_fortune(fortunes: &[Fortune], seed: Option<u64>) -> Option<String> {
+    unimplemented!();
 }
 
 // -------------------------------------------------------------------------
@@ -195,7 +200,7 @@ mod tests {
             assert_eq!(
                 fortunes.last().unwrap().text,
                 "Q: What do you call a deer wearing an eye patch?\n\
-                A: A bad idea (bad-eye dear)."
+                A: A bad idea (bad-eye deer)."
             );
         }
 
