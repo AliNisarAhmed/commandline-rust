@@ -1,19 +1,41 @@
-use std::error::Error;
+use std::{error::Error, str::FromStr};
 
-use chrono::NaiveDate;
+use chrono::{Datelike, Local, NaiveDate};
 use clap::Parser;
+
+const MONTH_NAMES: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
 #[derive(Debug, Parser)]
 struct Args {
-    #[arg(short = 'y', long, name = "SHOW_YEAR", required = false)]
+    #[arg(short = 'y', long = "year", name = "SHOW YEAR", required = false, conflicts_with_all = ["YEAR", "MONTH"])]
     show_current_year: bool,
 
-    #[arg(short = 'm', long, name = "MONTH", required = false)]
+    #[arg(
+        short = 'm', 
+        long, 
+        name = "MONTH",
+        help = "Month name or number (1-12)",
+        required = false,
+        value_parser = parse_month
+    )]
     month: Option<u32>,
 
-    #[arg(name = "YEAR")]
+    #[arg(name = "YEAR", help = "Year (1-9999)", value_parser = parse_year)]
     year: Option<i32>,
 }
 
@@ -27,15 +49,143 @@ pub struct Config {
 pub fn get_args() -> MyResult<Config> {
     let args = Args::parse();
 
+    let today = Local::now();
+    let year = if args.show_current_year {
+        today.year()
+    } else {
+        args.year.unwrap()
+    };
+
     Ok(Config {
         month: None,
-        year: 1,
-        today: chrono::prelude::Local::now().date_naive(),
+        year: year,
+        today: today.date_naive(),
     })
 }
 
+fn parse_int<T: FromStr>(val: &str) -> Result<T, String> {
+    val.parse::<T>()
+        .map_err(|_| format!("Invalid integer \"{}\"", val))
+}
+
+fn parse_year(year: &str) -> Result<i32, String> {
+    match parse_int::<i32>(year) {
+        Ok(n) if n >= 1 && n <= 9999 => Ok(n),
+        Ok(n) => Err(format!("year \"{}\" not in the range 1 through 9999", n)),
+        Err(e) => Err(e),
+    }
+}
+
+fn parse_month(month: &str) -> Result<u32, String> {
+    match parse_int::<u32>(month) {
+        Ok(n) => {
+            if (1..=12).contains(&n) {
+                Ok(n)
+            } else {
+                Err(format!("month \"{}\" not in the range 1 through 12", month))
+            }
+        }
+        _ => {
+            let lower = &month.to_lowercase();
+            let matches: Vec<_> = MONTH_NAMES
+                .iter()
+                .enumerate()
+                .filter_map(|(i, name)| {
+                    if name.to_lowercase().starts_with(lower) {
+                        Some(i + 1)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if matches.len() == 1 {
+                Ok(matches[0] as u32)
+            } else {
+                Err(format!("Invalid month \"{}\"", month))
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 pub fn run(config: Config) -> MyResult<()> {
     println!("{:?}", config);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{parse_int, parse_month, parse_year};
+
+    #[test]
+    fn test_parse_int() {
+        let res = parse_int::<usize>("1");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 1usize);
+
+        let res = parse_int::<i32>("-1");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), -1i32);
+
+        let res = parse_int::<i64>("foo");
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().to_string(), "Invalid integer \"foo\"");
+    }
+
+    #[test]
+    fn test_parse_year() {
+        let res = parse_year("1");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 1i32);
+
+        let res = parse_year("9999");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 9999i32);
+
+        let res = parse_year("0");
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "year \"0\" not in the range 1 through 9999"
+        );
+
+        let res = parse_year("10000");
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "year \"10000\" not in the range 1 through 9999"
+        );
+
+        let res = parse_year("foo");
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_parse_month() {
+        let res = parse_month("1");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 1u32);
+        let res = parse_month("12");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 12u32);
+        let res = parse_month("jan");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 1u32);
+        let res = parse_month("0");
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "month \"0\" not in the range 1 through 12"
+        );
+        let res = parse_month("13");
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "month \"13\" not in the range 1 through 12"
+        );
+        let res = parse_month("foo");
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().to_string(), "Invalid month \"foo\"");
+    }
 }
